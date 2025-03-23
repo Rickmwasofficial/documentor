@@ -14,10 +14,9 @@ from langchain.agents import AgentExecutor
 from langchain_core.runnables.history import RunnableWithMessageHistory
 import chromadb
 from langchain.prompts import PromptTemplate
-import platform
-import sqlite3
-print("Python version:", platform.python_version())
-print("SQLite version:", sqlite3.sqlite_version)
+__import__('pysqlite3')
+import sys
+sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 
 load_dotenv()
 os.environ['GOOGLE_API_KEY'] = os.getenv("GOOGLE_API_KEY")
