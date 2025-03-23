@@ -4,12 +4,11 @@ langchain_community
 langchain_google_genai
 pypdf
 langchain_text_splitters
-chromaDB
+chromadb
 langchain_chroma
 arxiv
 wikipedia
 bs4
-chromadb
 chroma-migrate
 groq
 langchain_groq
@@ -19,6 +18,4 @@ uvicorn
 langchain_google_community
 google-api-python-client
 streamlit
-sqlite3
 pysqlite3-binary
-libsqlite3-dev
