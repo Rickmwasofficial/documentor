@@ -19,3 +19,6 @@ uvicorn
 langchain_google_community
 google-api-python-client
 streamlit
+sqlite3
+pysqlite3-binary
+libsqlite3-dev
