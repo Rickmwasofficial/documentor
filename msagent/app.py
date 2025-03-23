@@ -32,29 +32,46 @@ search_tool = Tool(
 )
 
 # Create ChromaDB client for PDF data
-pdf_client = chromadb.PersistentClient(path="./chroma_db/pdf_data")
+cnet_client = chromadb.PersistentClient(path="./chroma_db/pdf_data/cnet")
+dbms_client = chromadb.PersistentClient(path="./chroma_db/pdf_data/dbms")
+edp_client = chromadb.PersistentClient(path="./chroma_db/pdf_data/edp")
+mis_client = chromadb.PersistentClient(path="./chroma_db/pdf_data/mis")
+open_source_client = chromadb.PersistentClient(path="./chroma_db/pdf_data/open_source")
+research_client = chromadb.PersistentClient(path="./chroma_db/pdf_data/research")
+swe_client = chromadb.PersistentClient(path="./chroma_db/pdf_data/swe")
 
-# Create the collection
-try:
-    collection = pdf_client.get_or_create_collection("pdf_docs")
-    print(f"Collection 'pdf_docs' ready")
-except Exception as e:
-    print(f"Error creating collection: {e}")
+def create_pdf_retreival(client, name):
+    # Create the collection
+    try:
+        collection = client.get_or_create_collection("pdf_docs")
+        print(f"Collection 'pdf_docs' ready")
+    except Exception as e:
+        print(f"Error creating collection: {e}")
 
-# Create Chroma vector store for PDF documents
-pdf_db = Chroma(
-    client=pdf_client,
-    collection_name="pdf_docs",
-    embedding_function=GoogleGenerativeAIEmbeddings(model='models/text-embedding-004'),
-)
+    # Create Chroma vector store for PDF documents
+    pdf_db = Chroma(
+        client=client,
+        collection_name="pdf_docs",
+        embedding_function=GoogleGenerativeAIEmbeddings(model='models/text-embedding-004'),
+    )
 
-docs_retreiver = pdf_db.as_retriever()
+    docs_retreiver = pdf_db.as_retriever()
 
-pdfs = create_retriever_tool(
-    retriever=docs_retreiver,
-    name='pdf retreiver',
-    description='Get educational content about open source applications'
-)
+    pdfs = create_retriever_tool(
+        retriever=docs_retreiver,
+        name=name,
+        description='Get educational content about open source applications'
+    )
+
+    return pdfs
+
+cnet = create_pdf_retreival(cnet_client, "computer_networks")
+dbms = create_pdf_retreival(dbms_client, "database_management")
+edp = create_pdf_retreival(edp_client, "event_driven")
+mis = create_pdf_retreival(mis_client, "information_systems_management")
+open_source = create_pdf_retreival(open_source_client, "open_source")
+research = create_pdf_retreival(research_client, "research_methods")
+swe = create_pdf_retreival(swe_client, "software_engineering")
 
 # Create ChromaDB client for web data
 web_client = chromadb.PersistentClient(path="./chroma_db/web_data")
@@ -75,20 +92,34 @@ web_db = Chroma(
 
 web_retriever = web_db.as_retriever()
 
-web_tool = create_retriever_tool(
-    retriever=web_retriever,
+# Define the retriever tool
+def search_embuni(query):
+    """Retrieve relevant content from the Embuni e-learning platform."""
+    docs = web_retriever.get_relevant_documents(query)
+    return "\n\n".join(doc.page_content for doc in docs)
+
+web_tool = Tool(
+    func=search_embuni,
     name='web_retriever',
-    description='Get Unit purpose and description'
+    description='Get Unit purpose and description, lecturer name etc..'
 )
 
-tools = [pdfs,
+tools = [cnet,
+         dbms,
+         edp,
+         mis,
+         open_source,
+         research,
+         swe,
          search_tool,
          web_tool]
 
 # Define a more structured prompt template
-prompt = PromptTemplate.from_template("""You are University of Embu's expert educational assistant for open source applications, focused on helping students learn effectively.
+prompt = PromptTemplate.from_template("""You are University of Embu's expert educational assistant for second year units, focused on helping students learn effectively.
 You prioritize thorough understanding and clear explanations based on reliable course materials.
 
+The units are:
+ - Open Source Applications, Computer Networks, Database management systems, event driven programming, information system management, open source applications, research methods and software engineering.
 You have access to the following tools:
 {tools}
 
@@ -98,6 +129,8 @@ STRATEGY GUIDELINES:
 3. When explaining concepts, include relevant examples and relate to real-world applications
 4. Break down complex topics into manageable parts
 5. If multiple sources provide different perspectives, synthesize them and explain the variations
+6. You can use web search to add more information to the content available in the documents
+7. The second priority after pdfs is checking from the web based agent tool
 
 You must follow this exact format:
 
@@ -120,7 +153,6 @@ Question: {input}
 {agent_scratchpad}
 """)
 
-
 memory = ChatMessageHistory(session_id="test-session")
 
 llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash")
@@ -133,7 +165,6 @@ agent = create_react_agent(
 )
 
 # Executor to execute the agent
-
 executor = AgentExecutor(
     agent=agent,
     tools=tools,
@@ -152,7 +183,7 @@ agent_with_chat_history = RunnableWithMessageHistory(
 )
 
 
-st.title('Study Buddy - Open Source Apps UoEm')
+st.title('Study Buddy - Second Year Units')
 st.markdown("By: *Rickmwasofficial* - **For Educational Purposes only**")
 
 # Initialize chat history
