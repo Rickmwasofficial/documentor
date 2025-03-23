@@ -15,6 +15,11 @@ from langchain_core.runnables.history import RunnableWithMessageHistory
 import chromadb
 from langchain.prompts import PromptTemplate
 
+import sys
+import pysqlite3
+
+sys.modules["sqlite3"] = pysqlite3
+
 load_dotenv()
 os.environ['GOOGLE_API_KEY'] = os.getenv("GOOGLE_API_KEY")
 os.environ["GOOGLE_CSE_ID"] = os.getenv("GOOGLE_CSE_ID")
