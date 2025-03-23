@@ -4,7 +4,6 @@ langchain_community
 langchain_google_genai
 pypdf
 langchain_text_splitters
-chromadb
 langchain_chroma
 arxiv
 wikipedia
@@ -17,5 +16,6 @@ fastapi
 uvicorn
 langchain_google_community
 google-api-python-client
-streamlit
 pysqlite3-binary
+streamlit==1.28.1
+chromadb==0.4.17
