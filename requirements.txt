@@ -6,7 +6,7 @@ pypdf
 langchain_text_splitters
 chromaDB
 langchain_chroma
-pysqlite3-binary
+pysqlite3-binary>=0.5.0
 wikipedia
 bs4
 chromadb
