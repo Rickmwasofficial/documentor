@@ -190,4 +190,4 @@ if prompt := st.chat_input('Where is this unit taught?'):
         
         st.markdown(response['output'])
     # Add assistant response to chat history
-    st.session_state.messages.append({"role": "assista
+    st.session_state.messages.append({"role": "assistant", "content": response['output']})
