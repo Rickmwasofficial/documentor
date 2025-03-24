@@ -14,9 +14,7 @@ from langchain.agents import AgentExecutor
 from langchain_core.runnables.history import RunnableWithMessageHistory
 import chromadb
 from langchain.prompts import PromptTemplate
-__import__('pysqlite3')
-import sys
-sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
+from langchain.memory import ChatMessageHistory, ConversationBufferMemory
 
 load_dotenv()
 os.environ['GOOGLE_API_KEY'] = os.getenv("GOOGLE_API_KEY")
@@ -63,7 +61,7 @@ def create_pdf_retreival(client, name):
     pdfs = create_retriever_tool(
         retriever=docs_retreiver,
         name=name,
-        description='Get educational content about open source applications'
+        description=f'Get educational content about {name}'
     )
 
     return pdfs
@@ -123,6 +121,10 @@ You prioritize thorough understanding and clear explanations based on reliable c
 
 The units are:
  - Open Source Applications, Computer Networks, Database management systems, event driven programming, information system management, open source applications, research methods and software engineering.
+
+You have access to chat history for better contextual responses.
+{history}
+                                      
 You have access to the following tools:
 {tools}
 
@@ -133,8 +135,7 @@ STRATEGY GUIDELINES:
 4. Break down complex topics into manageable parts
 5. If multiple sources provide different perspectives, synthesize them and explain the variations
 6. You can use web search to add more information to the content available in the documents
-7. The second priority after pdfs is checking from the web based agent tool
-
+7. If you don't find the course outline, go through all the documents and develop a well structured one
 You must follow this exact format:
 
 Question: the input question you must answer
@@ -145,7 +146,8 @@ Observation: the result from the tool
 ... (you can repeat the Thought/Action/Action Input/Observation steps multiple times)
 Thought: your final reasoning - synthesize what you've learned and organize your response
 Final Answer: your comprehensive educational response that includes:
-  - Clear explanation of concepts
+  - Clear and comprehensive explanation of concepts
+  - Be very detailed in your responses
   - Examples when helpful
   - Citations to course materials when applicable
   - Summary of key points
@@ -176,22 +178,33 @@ executor = AgentExecutor(
     handle_parsing_errors=True
 )
 
-agent_with_chat_history = RunnableWithMessageHistory(
-    executor,
-    # This is needed because in most real world scenarios, a session id is needed
-    # It isn't really used here because we are using a simple in memory ChatMessageHistory
-    lambda session_id: memory,
-    input_messages_key="input",
-    history_messages_key="chat_history",
-)
-
-
 st.title('Study Buddy - Second Year Units')
 st.markdown("By: *Rickmwasofficial* - **For Educational Purposes only**")
 
 # Initialize chat history
 if "messages" not in st.session_state:
     st.session_state.messages = []
+
+# Chat memory
+if "memory" not in st.session_state:
+    # Create a ChatMessageHistory object first
+    message_history = ChatMessageHistory()
+    
+    # Then use it in the ConversationBufferMemory
+    st.session_state.memory = ConversationBufferMemory(
+        chat_memory=message_history,
+        memory_key="chat_history",
+        return_messages=True
+    )
+
+agent_with_chat_history = RunnableWithMessageHistory(
+    executor,
+    # This is needed because in most real world scenarios, a session id is needed
+    # It isn't really used here because we are using a simple in memory ChatMessageHistory
+    lambda session_id: st.session_state.memory.chat_memory,
+    input_messages_key="input",
+    history_messages_key="chat_history",
+)
 
 # Display messages from history on app rerun
 for message in st.session_state.messages:
@@ -206,8 +219,12 @@ if prompt := st.chat_input('Where is this unit taught?'):
     # Add user message to chat history
     st.session_state.messages.append({'role': "user", "content": prompt})
 
-    response = agent_with_chat_history.invoke({'input': prompt},
-                               config={"configurable": {"session_id": "<foo>"}},)
+    response = agent_with_chat_history.invoke(
+                {"input": prompt, "history": st.session_state.memory}, 
+                {"configurable": {"session_id": "default"}}
+            )
+    print(st.session_state.memory)
+
     # Display assistant response in chat message container
     with st.chat_message("assistant"):
         if response.get("intermediate_steps"):
