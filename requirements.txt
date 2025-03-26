@@ -16,6 +16,7 @@ fastapi
 uvicorn
 langchain_google_community
 google-api-python-client
-pysqlite3-binary
+# pysqlite3-binary
 streamlit==1.28.1
 chromadb==0.4.24
+faiss-cpu

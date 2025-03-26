@@ -9,7 +9,7 @@ from langchain.tools.retriever import create_retriever_tool
 from langchain_community.document_loaders import WebBaseLoader
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.agents import create_react_agent
-from langchain_community.chat_message_histories import ChatMessageHistory
+from langchain.memory import ChatMessageHistory
 from langchain.agents import AgentExecutor
 from langchain_core.runnables.history import RunnableWithMessageHistory
 import chromadb
@@ -96,7 +96,7 @@ web_retriever = web_db.as_retriever()
 # Define the retriever tool
 def search_embuni(query):
     """Retrieve relevant content from the Embuni e-learning platform."""
-    docs = web_retriever.get_relevant_documents(query)
+    docs = web_retriever.invoke(query)
     return "\n\n".join(doc.page_content for doc in docs)
 
 web_tool = Tool(
@@ -119,12 +119,11 @@ tools = [cnet,
 prompt = PromptTemplate.from_template("""You are University of Embu's expert educational assistant for second year units, focused on helping students learn effectively.
 You prioritize thorough understanding and clear explanations based on reliable course materials.
 
-The units are:
- - Open Source Applications, Computer Networks, Database management systems, event driven programming, information system management, open source applications, research methods and software engineering.
-
-You have access to chat history for better contextual responses.
+You have access to the chat history to provide more relevant answers:
 {history}
                                       
+The units are:
+ - Open Source Applications, Computer Networks, Database management systems, event driven programming, information system management, open source applications, research methods and software engineering.
 You have access to the following tools:
 {tools}
 
@@ -135,7 +134,8 @@ STRATEGY GUIDELINES:
 4. Break down complex topics into manageable parts
 5. If multiple sources provide different perspectives, synthesize them and explain the variations
 6. You can use web search to add more information to the content available in the documents
-7. If you don't find the course outline, go through all the documents and develop a well structured one
+7. The second priority after pdfs is checking from the web based agent tool
+
 You must follow this exact format:
 
 Question: the input question you must answer
@@ -146,8 +146,7 @@ Observation: the result from the tool
 ... (you can repeat the Thought/Action/Action Input/Observation steps multiple times)
 Thought: your final reasoning - synthesize what you've learned and organize your response
 Final Answer: your comprehensive educational response that includes:
-  - Clear and comprehensive explanation of concepts
-  - Be very detailed in your responses
+  - Clear explanation of concepts
   - Examples when helpful
   - Citations to course materials when applicable
   - Summary of key points
