@@ -1,5 +1,7 @@
-import streamlit as st
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
 import os
+from googleapiclient.discovery import build
 from dotenv import load_dotenv
 from langchain_community.document_loaders import PyPDFDirectoryLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -18,20 +20,12 @@ from langchain.memory import ChatMessageHistory, ConversationBufferMemory
 
 from streamlit_chat import message
 
-
-st.set_page_config(page_title="Blue - Studdy Buddy")
-
-hide_default_format = """
-       <style>
-       #MainMenu {visibility: hidden; }
-       footer {visibility: hidden;}
-       </style>
-       """
-st.markdown(hide_default_format, unsafe_allow_html=True)
-
 load_dotenv()
 os.environ['GOOGLE_API_KEY'] = os.getenv("GOOGLE_API_KEY")
 os.environ["GOOGLE_CSE_ID"] = os.getenv("GOOGLE_CSE_ID")
+
+# FastAPI initialization
+app = FastAPI()
 
 # Search tool
 from langchain_core.tools import Tool
@@ -166,9 +160,6 @@ tools = [cnet,
 # Define a more structured prompt template
 prompt = PromptTemplate.from_template("""You are Blue, University of Embu's expert educational assistant for second year units, focused on helping students learn effectively.
 You prioritize thorough understanding and clear explanations based on reliable course materials.
-
-You have access to the chat history to provide more relevant answers:
-{history}
                                       
 The units are:
  - Open Source Applications, Computer Networks, Database management systems, event driven programming, information system management, open source applications, research methods and software engineering.
@@ -198,7 +189,6 @@ STRATEGY GUIDELINES:
 9. The second priority after PDFs is checking from the web-based agent tool
 
 You must follow this exact format:
-
 Question: the input question you must answer
 Thought: your reasoning about what to do next (be thorough in your thinking)
 Action: the tool name to use (must be one of: {tool_names}) - Do not use the youtube tool if it is not reqired in the question
@@ -211,7 +201,7 @@ Final Answer: your comprehensive educational response that includes:
   - Examples when helpful
   - Citations to course materials when applicable
   - Summary of key points
-  - Recommended YouTube videos for further learning ONLY for substantive, educational queries that require in-depth explanation
+  - Recommended YouTube videos for further learning ONLY for substantive, educational queries that require in-depth explanation.
 
 Begin! Remember to ALWAYS follow the format exactly and prioritize course PDF materials before using other tools.
 
@@ -239,98 +229,52 @@ executor = AgentExecutor(
     handle_parsing_errors=True
 )
 
+# Define the API's data model for user input
+class UserQuery(BaseModel):
+    query: str
 
-
-st.title('Blue - Your Studdy Buddy')
-st.markdown("By: *Rickmwasofficial* - **For Educational Purposes only**")
-
-# Update the Streamlit app to display YouTube videos
-def display_youtube_videos(videos):
-    """Display YouTube video embeds in Streamlit."""
-    if videos:
-        st.markdown("#### Recommended YouTube Videos")
-        cols = st.columns(len(videos))
-        for i, video in enumerate(videos):
-            with cols[i]:
-                st.video(video['embed_link'])
-                st.write(video['title'])
-
-# Initialize chat history
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-
-# Chat memory
-if "memory" not in st.session_state:
-    # Create a ChatMessageHistory object first
-    message_history = ChatMessageHistory()
-    
-    # Then use it in the ConversationBufferMemory
-    st.session_state.memory = ConversationBufferMemory(
-        chat_memory=message_history,
-        memory_key="chat_history",
-        return_messages=True
-    )
-
-agent_with_chat_history = RunnableWithMessageHistory(
-    executor,
-    # This is needed because in most real world scenarios, a session id is needed
-    # It isn't really used here because we are using a simple in memory ChatMessageHistory
-    lambda session_id: st.session_state.memory.chat_memory,
-    input_messages_key="input",
-    history_messages_key="chat_history",
-)
-
-# Display messages from history on app rerun
-for messages in st.session_state.messages:
-    if messages['role'] == "user": 
-        message(messages['content'], is_user=True)
-    else:
-        message(messages['content'])
-
-# React to user input
-# Modify the response handling to include YouTube videos
-if prompt := st.chat_input('Where is this unit taught?'):
-    # Display user message in chat message container
-    message(prompt, is_user=True)
-    # Add user message to chat history
-    st.session_state.messages.append({'role': "user", "content": prompt})
-
-    response = agent_with_chat_history.invoke(
-                {"input": prompt, "history": st.session_state.memory}, 
-                {"configurable": {"session_id": "default"}}
-            )
-    
-    # Search for YouTube videos related to the query
+@app.post("/ask/")
+async def ask_question(user_query: UserQuery):
+    """Handles user questions and returns responses from the agent."""
     try:
-        youtube_videos = youtube_tool.run(prompt)
+        response = executor.invoke({"input": user_query.query})
+        return {"response": response["output"]}
     except Exception as e:
-        youtube_videos = []
+        raise HTTPException(status_code=400, detail=str(e))
 
-    # Create a structured response
-    processed_response = {
-        'type': 'normal',
-        'data': response['output']
-    }
+def search_youtube_videos(query):
+    """Search for relevant YouTube videos."""
+    youtube = build('youtube', 'v3', developerKey=os.getenv("GOOGLE_API_KEY"))
+    request = youtube.search().list(
+        part="snippet",
+        maxResults=3,
+        q=query + " tutorial",
+        type="video",
+        videoEmbeddable="true",
+    )
+    response = request.execute()
+    
+    # Return a list of YouTube video data
+    videos = []
+    for item in response['items']:
+        videos.append({
+            'key': item['id']['videoId'],  # Return the videoId as the key
+            'title': item['snippet']['title'],
+            'embed_link': f"https://www.youtube.com/embed/{item['id']['videoId']}"
+        })
+    
+    return videos
 
-    print(st.session_state.memory)
-    
-    if response.get("intermediate_steps"):
-        steps_markdown = ""
-        for step in response["intermediate_steps"]:
-            if isinstance(step, tuple) and len(step) > 0:
-                agent_action = step[0]
-                if hasattr(agent_action, "log"):
-                    thought_log = agent_action.log
-                    if "Thought:" in thought_log:
-                        steps_markdown += f"- {thought_log.split('Action:')[0].strip()}\n"
-        
-        st.markdown(steps_markdown)
-        
-    message(processed_response['data'], allow_html=True)
-    
-    # Display YouTube videos if available
-    if youtube_videos:
-        display_youtube_videos(youtube_videos)
-    
-    # Add assistant response to chat history
-    st.session_state.messages.append({"role": "assistant", "content": response['output']})
+# Define the request body model
+class UserQuery(BaseModel):
+    query: str
+
+# Endpoint to search YouTube
+@app.post("/youtube/")
+async def search_youtube(query: UserQuery):
+    """Returns educational YouTube videos based on the query."""
+    try:
+        videos = search_youtube_videos(query.query)  # Use the 'query' from UserQuery
+        return {"videos": videos}  # Return the video details with 'key' instead of 'id'
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
